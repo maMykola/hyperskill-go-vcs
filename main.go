@@ -19,6 +19,7 @@ const (
 const (
 	vcsDir     = "./vcs/"
 	configFile = vcsDir + "config.txt"
+	indexFile  = vcsDir + "index.txt"
 )
 
 var allowedCommands = []Command{
@@ -75,7 +76,7 @@ func config(args []string) {
 	}
 
 	if username, err := getUsername(); err == nil {
-		fmt.Printf("The username is %s\n", username)
+		fmt.Printf("The username is %s.\n", username)
 	} else {
 		fmt.Println("Please, tell me who you are.")
 	}
@@ -107,7 +108,45 @@ func getUsername() (string, error) {
 }
 
 func add(args []string) {
-	// todo: stub
+	if len(args) != 1 {
+		displayTracking()
+		return
+	}
+
+	os.MkdirAll(vcsDir, os.ModePerm)
+
+	filename := args[0]
+
+	if _, err := os.Stat(filename); err != nil {
+		fmt.Printf("Can't find '%s'.\n", filename)
+		return
+	}
+
+	file, err := os.OpenFile(indexFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	file.WriteString(filename + "\n")
+
+	fmt.Printf("The file '%s' is tracked.", filename)
+}
+
+func displayTracking() {
+	file, err := os.Open(indexFile)
+	if err != nil {
+		fmt.Println("Add a file to the index.")
+		return
+	}
+	defer file.Close()
+
+	fmt.Println("Tracked files:")
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		fmt.Println(scanner.Text())
+	}
 }
 
 func log(args []string) {
