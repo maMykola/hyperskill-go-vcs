@@ -151,12 +151,15 @@ func displayTracking() {
 
 func log(args []string) {
 	// todo: stub
+	fmt.Println(helpMsg[cmdLog])
 }
 
 func commit(args []string) {
 	// todo: stub
+	fmt.Println(helpMsg[cmdCommit])
 }
 
 func checkout(args []string) {
 	// todo: stub
+	fmt.Println(helpMsg[cmdCheckout])
 }
