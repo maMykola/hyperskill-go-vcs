@@ -2,11 +2,27 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"log"
 	"os"
+	"path/filepath"
 )
 
 type Command string
+
+type Person struct {
+	Name string
+}
+
+type Commit struct {
+	Hash    string
+	Author  Person
+	Message string
+	Files   []string
+}
 
 const (
 	cmdConfig   Command = "config"
@@ -18,8 +34,10 @@ const (
 
 const (
 	vcsDir     = "./vcs/"
+	commitsDir = vcsDir + "commits"
 	configFile = vcsDir + "config.txt"
 	indexFile  = vcsDir + "index.txt"
+	logFile    = vcsDir + "log.txt"
 )
 
 var allowedCommands = []Command{
@@ -49,15 +67,15 @@ func main() {
 
 	switch cmd {
 	case cmdConfig:
-		config(args)
+		doConfig(args)
 	case cmdAdd:
-		add(args)
+		doAdd(args)
 	case cmdLog:
-		log(args)
+		doLog(args)
 	case cmdCommit:
-		commit(args)
+		doCommit(args)
 	case cmdCheckout:
-		checkout(args)
+		doCheckout(args)
 	default:
 		fmt.Printf("'%s' is not a SVCS command.\n", cmd)
 	}
@@ -70,7 +88,7 @@ func displayHelp() {
 	}
 }
 
-func config(args []string) {
+func doConfig(args []string) {
 	if len(args) == 1 {
 		setUsername(args[0])
 	}
@@ -107,9 +125,9 @@ func getUsername() (string, error) {
 	return scanner.Text(), scanner.Err()
 }
 
-func add(args []string) {
+func doAdd(args []string) {
 	if len(args) != 1 {
-		displayTracking()
+		showTrackedFiles()
 		return
 	}
 
@@ -124,7 +142,7 @@ func add(args []string) {
 
 	file, err := os.OpenFile(indexFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	defer file.Close()
 
@@ -133,33 +151,131 @@ func add(args []string) {
 	fmt.Printf("The file '%s' is tracked.", filename)
 }
 
-func displayTracking() {
-	file, err := os.Open(indexFile)
-	if err != nil {
-		fmt.Println("Add a file to the index.")
-		return
-	}
-	defer file.Close()
-
+func showTrackedFiles() {
 	fmt.Println("Tracked files:")
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		fmt.Println(scanner.Text())
+	for _, filename := range getTrackedFiles() {
+		fmt.Println(filename)
 	}
 }
 
-func log(args []string) {
+func getTrackedFiles() []string {
+	file, err := os.Open(indexFile)
+	if err != nil {
+		return nil
+	}
+	defer file.Close()
+
+	files := make([]string, 0, 5)
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		files = append(files, scanner.Text())
+	}
+
+	return files
+}
+
+func doLog(args []string) {
 	// todo: stub
 	fmt.Println(helpMsg[cmdLog])
 }
 
-func commit(args []string) {
-	// todo: stub
-	fmt.Println(helpMsg[cmdCommit])
+func doCommit(args []string) {
+	if len(args) != 1 {
+		fmt.Println("Message was not passed.")
+		return
+	}
+
+	commit := Commit{Message: args[0]}
+
+	commit.Files = getTrackedFiles()
+	if len(commit.Files) == 0 {
+		fmt.Println("Nothing to commit.")
+		return
+	}
+
+	username, err := getUsername()
+	if err != nil {
+		fmt.Println("Please, tell me who are you.")
+		return
+	}
+
+	commit.Author.Name = username
+	commit.Save()
+
+	fmt.Println("Changes are commited.")
 }
 
-func checkout(args []string) {
+func doCheckout(args []string) {
 	// todo: stub
 	fmt.Println(helpMsg[cmdCheckout])
+}
+
+func (c *Commit) Save() {
+	computeHash(c)
+	commitFiles(c)
+	addLog(c)
+	clearStage()
+}
+
+func computeHash(c *Commit) {
+	sha256Hash := sha256.New()
+	for _, filename := range c.Files {
+		file, err := os.Open(filename)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if _, err := io.Copy(sha256Hash, file); err != nil {
+			log.Fatal(err)
+		}
+
+		file.Close()
+	}
+
+	c.Hash = hex.EncodeToString(sha256Hash.Sum(nil))
+}
+
+func commitFiles(c *Commit) {
+	commitPath := filepath.Join(commitsDir, c.Hash)
+	for _, filename := range c.Files {
+		copyFile(filepath.Join(commitPath, filename), filename)
+	}
+}
+
+func copyFile(dest, src string) {
+	os.MkdirAll(filepath.Dir(dest), os.ModePerm)
+
+	source, err := os.Open(src)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer source.Close()
+
+	file, err := os.Create(dest)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	if _, err := io.Copy(file, source); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func addLog(c *Commit) {
+	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	file.WriteString(fmt.Sprintf("%s %s %s\n", c.Hash, c.Author.Name, c.Message))
+}
+
+func clearStage() {
+	err := os.Truncate(indexFile, 0)
+	if err != nil && !os.IsNotExist(err) {
+		log.Fatal(err)
+	}
 }
