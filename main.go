@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -235,7 +236,20 @@ func findCommit(hash string) (Commit, bool) {
 }
 
 func restoreCommit(commit Commit) {
-	commit.show()
+	commitDir := filepath.Join(commitsDir, commit.Hash)
+
+	filepath.WalkDir(commitDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !d.IsDir() {
+			dest := strings.TrimPrefix(path, commitDir)[1:]
+			copyFile(dest, path)
+		}
+
+		return nil
+	})
 }
 
 func doCommit(args []string) {
@@ -270,6 +284,7 @@ func doCheckout(args []string) {
 	}
 
 	restoreCommit(commit)
+	fmt.Printf("Switched to commit %s.", commit.Hash)
 }
 
 func saveCommit(username, message string) (saved bool) {
@@ -298,6 +313,10 @@ func computeHash(files []string) string {
 			log.Fatal(err)
 		}
 
+		// hash filename in case of empty file
+		sha256Hash.Write([]byte(filename))
+
+		// hash file content
 		if _, err := io.Copy(sha256Hash, file); err != nil {
 			log.Fatal(err)
 		}
