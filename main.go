@@ -253,9 +253,11 @@ func doCommit(args []string) {
 	}
 
 	commit.Author.Name = username
-	commit.Save()
-
-	fmt.Println("Changes are committed.")
+	if commit.Save() {
+		fmt.Println("Changes are committed.")
+	} else {
+		fmt.Println("Nothing to commit.")
+	}
 }
 
 func doCheckout(args []string) {
@@ -263,11 +265,14 @@ func doCheckout(args []string) {
 	fmt.Println(helpMsg[cmdCheckout])
 }
 
-func (c *Commit) Save() {
+func (c *Commit) Save() (saved bool) {
 	computeHash(c)
-	commitFiles(c)
-	addLog(c)
-	clearStage()
+	if isNewChanges(c) {
+		commitFiles(c)
+		addLog(c)
+		saved = true
+	}
+	return
 }
 
 func computeHash(c *Commit) {
@@ -286,6 +291,16 @@ func computeHash(c *Commit) {
 	}
 
 	c.Hash = hex.EncodeToString(sha256Hash.Sum(nil))
+}
+
+func isNewChanges(c *Commit) bool {
+	path := filepath.Join(commitsDir, c.Hash)
+
+	if _, err := os.Stat(path); err == nil {
+		return false
+	}
+
+	return true
 }
 
 func commitFiles(c *Commit) {
@@ -323,11 +338,4 @@ func addLog(c *Commit) {
 	defer file.Close()
 
 	file.WriteString(fmt.Sprintf("%s %s %s\n", c.Hash, c.Author.Name, c.Message))
-}
-
-func clearStage() {
-	err := os.Truncate(indexFile, 0)
-	if err != nil && !os.IsNotExist(err) {
-		log.Fatal(err)
-	}
 }
