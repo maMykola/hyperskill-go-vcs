@@ -9,6 +9,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 )
 
 type Command string
@@ -71,7 +73,7 @@ func main() {
 	case cmdAdd:
 		doAdd(args)
 	case cmdLog:
-		doLog(args)
+		doLog()
 	case cmdCommit:
 		doCommit(args)
 	case cmdCheckout:
@@ -175,9 +177,53 @@ func getTrackedFiles() []string {
 	return files
 }
 
-func doLog(args []string) {
-	// todo: stub
-	fmt.Println(helpMsg[cmdLog])
+func doLog() {
+	commits := getCommits()
+	if len(commits) == 0 {
+		fmt.Println("No commits yet.")
+		return
+	}
+
+	commits[0].show()
+
+	for i := 1; i < len(commits); i++ {
+		fmt.Println()
+		commits[i].show()
+	}
+}
+
+func (c *Commit) show() {
+	fmt.Println("commit", c.Hash)
+	fmt.Println("Author:", c.Author.Name)
+	fmt.Println(c.Message)
+}
+
+func getCommits() []Commit {
+	file, err := os.Open(logFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	var commits []Commit
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		data := strings.SplitN(line, " ", 3)
+		commits = append(commits, Commit{
+			Hash:    data[0],
+			Author:  Person{Name: data[1]},
+			Message: data[2],
+		})
+	}
+
+	slices.Reverse(commits)
+
+	return commits
 }
 
 func doCommit(args []string) {
