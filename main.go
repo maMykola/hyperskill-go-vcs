@@ -224,6 +224,20 @@ func getCommits() []Commit {
 	return commits
 }
 
+func findCommit(hash string) (Commit, bool) {
+	for _, commit := range getCommits() {
+		if commit.Hash == hash {
+			return commit, true
+		}
+	}
+
+	return Commit{}, false
+}
+
+func restoreCommit(commit Commit) {
+	commit.show()
+}
+
 func doCommit(args []string) {
 	if len(args) != 1 {
 		fmt.Println("Message was not passed.")
@@ -244,8 +258,18 @@ func doCommit(args []string) {
 }
 
 func doCheckout(args []string) {
-	// todo: stub
-	fmt.Println(helpMsg[cmdCheckout])
+	if len(args) != 1 {
+		fmt.Println("Commit id was not passed.")
+		return
+	}
+
+	commit, ok := findCommit(args[0])
+	if !ok {
+		fmt.Println("Commit does not exist.")
+		return
+	}
+
+	restoreCommit(commit)
 }
 
 func saveCommit(username, message string) (saved bool) {
