@@ -150,7 +150,7 @@ func doAdd(args []string) {
 
 	file.WriteString(filename + "\n")
 
-	fmt.Printf("The file '%s' is tracked.", filename)
+	fmt.Printf("The file '%s' is tracked.\n", filename)
 }
 
 func showTrackedFiles() {
