@@ -9,21 +9,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
 type Command string
 
-type Person struct {
-	Name string
-}
-
 type Commit struct {
-	Hash    string
-	Author  Person
-	Message string
-	Files   []string
+	Hash     string
+	Username string
+	Message  string
 }
 
 const (
@@ -83,6 +77,12 @@ func main() {
 	}
 }
 
+func (c *Commit) show() {
+	fmt.Println("commit", c.Hash)
+	fmt.Println("Author:", c.Username)
+	fmt.Println(c.Message)
+}
+
 func displayHelp() {
 	fmt.Println("These are SVCS commands:")
 	for _, command := range allowedCommands {
@@ -136,7 +136,6 @@ func doAdd(args []string) {
 	os.MkdirAll(vcsDir, os.ModePerm)
 
 	filename := args[0]
-
 	if _, err := os.Stat(filename); err != nil {
 		fmt.Printf("Can't find '%s'.\n", filename)
 		return
@@ -190,18 +189,13 @@ func doLog() {
 		return
 	}
 
-	commits[0].show()
+	i := len(commits) - 1
+	commits[i].show()
 
-	for i := 1; i < len(commits); i++ {
+	for i--; i >= 0; i-- {
 		fmt.Println()
 		commits[i].show()
 	}
-}
-
-func (c *Commit) show() {
-	fmt.Println("commit", c.Hash)
-	fmt.Println("Author:", c.Author.Name)
-	fmt.Println(c.Message)
 }
 
 func getCommits() []Commit {
@@ -221,13 +215,11 @@ func getCommits() []Commit {
 		line := scanner.Text()
 		data := strings.SplitN(line, " ", 3)
 		commits = append(commits, Commit{
-			Hash:    data[0],
-			Author:  Person{Name: data[1]},
-			Message: data[2],
+			Hash:     data[0],
+			Username: data[1],
+			Message:  data[2],
 		})
 	}
-
-	slices.Reverse(commits)
 
 	return commits
 }
@@ -238,22 +230,13 @@ func doCommit(args []string) {
 		return
 	}
 
-	commit := Commit{Message: args[0]}
-
-	commit.Files = getTrackedFiles()
-	if len(commit.Files) == 0 {
-		fmt.Println("Nothing to commit.")
-		return
-	}
-
 	username, err := getUsername()
 	if err != nil {
 		fmt.Println("Please, tell me who are you.")
 		return
 	}
 
-	commit.Author.Name = username
-	if commit.Save() {
+	if saveCommit(username, args[0]) {
 		fmt.Println("Changes are committed.")
 	} else {
 		fmt.Println("Nothing to commit.")
@@ -265,19 +248,27 @@ func doCheckout(args []string) {
 	fmt.Println(helpMsg[cmdCheckout])
 }
 
-func (c *Commit) Save() (saved bool) {
-	computeHash(c)
-	if isNewChanges(c) {
-		commitFiles(c)
-		addLog(c)
+func saveCommit(username, message string) (saved bool) {
+	files := getTrackedFiles()
+	hash := computeHash(files)
+	if hasChanges(hash) {
+		commit := Commit{
+			Hash:     hash,
+			Username: username,
+			Message:  message,
+		}
+
+		commitFiles(hash, files)
+		addLog(commit)
+
 		saved = true
 	}
 	return
 }
 
-func computeHash(c *Commit) {
+func computeHash(files []string) string {
 	sha256Hash := sha256.New()
-	for _, filename := range c.Files {
+	for _, filename := range files {
 		file, err := os.Open(filename)
 		if err != nil {
 			log.Fatal(err)
@@ -290,11 +281,11 @@ func computeHash(c *Commit) {
 		file.Close()
 	}
 
-	c.Hash = hex.EncodeToString(sha256Hash.Sum(nil))
+	return hex.EncodeToString(sha256Hash.Sum(nil))
 }
 
-func isNewChanges(c *Commit) bool {
-	path := filepath.Join(commitsDir, c.Hash)
+func hasChanges(hash string) bool {
+	path := filepath.Join(commitsDir, hash)
 
 	if _, err := os.Stat(path); err == nil {
 		return false
@@ -303,9 +294,9 @@ func isNewChanges(c *Commit) bool {
 	return true
 }
 
-func commitFiles(c *Commit) {
-	commitPath := filepath.Join(commitsDir, c.Hash)
-	for _, filename := range c.Files {
+func commitFiles(hash string, files []string) {
+	commitPath := filepath.Join(commitsDir, hash)
+	for _, filename := range files {
 		copyFile(filepath.Join(commitPath, filename), filename)
 	}
 }
@@ -330,12 +321,12 @@ func copyFile(dest, src string) {
 	}
 }
 
-func addLog(c *Commit) {
+func addLog(c Commit) {
 	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer file.Close()
 
-	file.WriteString(fmt.Sprintf("%s %s %s\n", c.Hash, c.Author.Name, c.Message))
+	file.WriteString(fmt.Sprintf("%s %s %s\n", c.Hash, c.Username, c.Message))
 }
