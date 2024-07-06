@@ -255,7 +255,7 @@ func doCommit(args []string) {
 	commit.Author.Name = username
 	commit.Save()
 
-	fmt.Println("Changes are commited.")
+	fmt.Println("Changes are committed.")
 }
 
 func doCheckout(args []string) {
