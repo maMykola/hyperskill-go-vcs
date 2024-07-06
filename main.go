@@ -154,8 +154,14 @@ func doAdd(args []string) {
 }
 
 func showTrackedFiles() {
+	files := getTrackedFiles()
+	if len(files) == 0 {
+		fmt.Println("Add a file to the index.")
+		return
+	}
+
 	fmt.Println("Tracked files:")
-	for _, filename := range getTrackedFiles() {
+	for _, filename := range files {
 		fmt.Println(filename)
 	}
 }
